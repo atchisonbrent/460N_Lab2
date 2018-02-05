@@ -392,7 +392,66 @@ int main(int argc, char *argv[]) {
  *  -Update NEXT_LATCHES
  */
 void process_instruction(){
+    
+    /* Increment PC */
     NEXT_LATCHES.PC = CURRENT_LATCHES.PC + 2;
+    
+    /* Update Flags */
+    NEXT_LATCHES.N = CURRENT_LATCHES.N;
+    NEXT_LATCHES.Z = CURRENT_LATCHES.Z;
+    NEXT_LATCHES.P = CURRENT_LATCHES.P;
+    
+    /* Update Opcode */
+    int imm = MEMORY[CURRENT_LATCHES.PC / 2][0] + (MEMORY[CURRENT_LATCHES.PC / 2][1] << 8);
+    int op = (imm & 0xF000) >> 12;
+    
+    /* Process Opcode */
+    switch (op) {
+        case 0: { /* BR */
+            break;
+        }
+        case 1: { /* ADD */
+            break;
+        }
+        case 2: { /* LDB */
+            break;
+        }
+        case 3: { /* STB */
+            break;
+        }
+        case 4: { /* JSR */
+            break;
+        }
+        case 5: { /* AND */
+            break;
+        }
+        case 6: { /* LDW */
+            break;
+        }
+        case 7: { /* STW */
+            break;
+        }
+        case 8: { break; }  /* RTI */
+        case 9: { /* XOR */
+            break;
+        }
+        case 10: { break; } /* Unused */
+        case 11: { break; } /* Unused */
+        case 12: { /* JMP */
+            break;
+        }
+        case 13: { /* SHF */
+            break;
+        }
+        case 14: { /* LEA */
+            break;
+        }
+        case 15: { /* TRAP */
+            //int trap = imm & 0x00FF;
+            break;
+        }
+        default: { printf("You done fucked up."); break; }
+    }
 }
 
 
