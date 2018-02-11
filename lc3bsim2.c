@@ -27,7 +27,28 @@
 /* These are the functions you'll have to write.               */
 /***************************************************************/
 
-void process_instruction();
+void process_instruction(void);
+void br(short, short, short, short);
+void imm_add(short, short, short);
+void reg_add(short, short, short);
+void imm_and(short, short, short);
+void reg_and(short, short, short);
+void jmp(short);
+void jsr(short);
+void jsrr(short);
+void ldb(short, short, short);
+void ldw(short, short, short);
+void lea(short, short);
+void lshf(short, short, short);
+void rshfl(short, short, short);
+void rshfa(short, short, short);
+void stb(short, short, short);
+void stw(short, short, short);
+void trap(short);
+void imm_xor(short, short, short);
+void reg_xor(short, short, short);
+void flags(short);
+short sign(short, short);
 
 /***************************************************************/
 /* A couple of useful definitions.                             */
@@ -391,7 +412,7 @@ int main(int argc, char *argv[]) {
  *  -Execute
  *  -Update NEXT_LATCHES
  */
-void process_instruction(){
+void process_instruction(void){
     
     /* Increment PC */
     NEXT_LATCHES.PC = CURRENT_LATCHES.PC + 2;
@@ -408,50 +429,280 @@ void process_instruction(){
     /* Process Opcode */
     switch (op) {
         case 0: { /* BR */
+            short n = (imm & 0x0800) >> 11;
+            short z = (imm & 0x0400) >> 10;
+            short p = (imm & 0x0200) >> 9;
+            short offset = imm & 0x1FF;
+            br(n, z, p, offset);
             break;
         }
         case 1: { /* ADD */
+            short mask = 0x0020;
+            short dr = (imm & 0x0E00) >> 9;
+            short sr1 = (imm & 0x01C0) >> 6;
+            short sr2 = imm & 0x0007;
+            short off = imm & 0x001F;
+            if (imm & mask) { imm_add(dr, sr1, off); }  /* imm[5] is set */
+            else { reg_add(dr, sr1, sr2); }
             break;
         }
         case 2: { /* LDB */
+            short dr  = (imm & 0x0E00) >> 9;
+            short base = (imm & 0x01C0) >> 6;
+            short off = imm & 0x003F;
+            ldb(dr, base, off);
             break;
         }
         case 3: { /* STB */
+            short sr = imm & 0x0E00 >> 9;
+            short base = imm & 0x01C0 >> 6;
+            short off = imm & 0x003F;
+            stb(sr, base, off);
             break;
         }
         case 4: { /* JSR */
+            if (imm & 0x0800) { jsr(imm & 0x07FF); }
+            else { jsrr((imm & 0x1C0) << 6); }
             break;
         }
         case 5: { /* AND */
+            short mask = 0x0020;
+            short dr  = (imm & 0x0E00) >> 9;
+            short sr1 = (imm & 0x01C0) >> 6;
+            short sr2 = imm & 0x0007;
+            short off = imm & 0x001F;
+            if (imm & mask) { imm_and(dr, sr1, off); }  /* imm[5] is set */
+            else { reg_and(dr, sr1, sr2); }
             break;
         }
         case 6: { /* LDW */
+            short dr = (imm & 0x0E00) >> 9;
+            short base = (imm & 0x01C0) >> 6;
+            short off = imm & 0x003F;
+            ldw(dr, base, off);
             break;
         }
         case 7: { /* STW */
+            short sr = (imm & 0x0E00) >> 9;
+            short base = (imm & 0x01C0) >> 6;
+            short off = imm & 0x003F;
+            stw(sr, base, off);
             break;
         }
-        case 8: { break; }  /* RTI */
         case 9: { /* XOR */
+            unsigned short mask = 0x0020;
+            unsigned short dr  = (imm & 0x0E00) >> 9;
+            unsigned short sr1 = (imm & 0x01C0) >> 6;
+            unsigned short sr2 = imm & 0x0007;
+            unsigned short off = imm & 0x001F;
+            if (imm & mask) { imm_xor(dr, sr1, off); }  /* imm[5] is set */
+            else { reg_xor(dr, sr1, sr2); }
             break;
         }
-        case 10: { break; } /* Unused */
-        case 11: { break; } /* Unused */
         case 12: { /* JMP */
+            jmp((imm & 0x01C0) >> 6);
             break;
         }
         case 13: { /* SHF */
+            short dr  = (imm & 0x0E00) >> 9;
+            short sr = (imm & 0x01C0) >> 6;
+            short shift = imm & 0x000F;
+            if(imm & 0x0010) {
+                if(imm & 0x0020) { rshfa(dr, sr, shift); }
+                else { rshfl(dr, sr, shift); }
+            } else { lshf(dr, sr, shift); }
             break;
         }
         case 14: { /* LEA */
+            short dr = (imm & 0x0E00) >> 9;
+            short off = imm & 0x01FF;
+            lea(dr, off);
             break;
         }
         case 15: { /* TRAP */
-            //int trap = imm & 0x00FF;
+            trap(imm & 0x00FF);
             break;
         }
-        default: { printf("You done fucked up."); break; }
+        default: { printf("You done messed up."); break; }
     }
 }
 
+/* Branch */
+void br(short n, short z, short p, short offset) {
+    if((n && CURRENT_LATCHES.N) || (z && CURRENT_LATCHES.Z) || (p && CURRENT_LATCHES.P)) {
+        short imm = sign(9, offset);
+        NEXT_LATCHES.PC = NEXT_LATCHES.PC + imm * 2;
+    }
+}
 
+/* Add Immediate */
+void imm_add(short dr, short sr1, short off) {
+    short imm = sign(5, off);
+    NEXT_LATCHES.REGS[dr] = (short)(CURRENT_LATCHES.REGS[sr1] + imm);
+    flags((short)NEXT_LATCHES.REGS[dr]);
+}
+
+/* Add Register */
+void reg_add(short dr, short sr1, short sr2) {
+    NEXT_LATCHES.REGS[dr] = (short)(CURRENT_LATCHES.REGS[sr1] + CURRENT_LATCHES.REGS[sr2]);
+    flags((short)NEXT_LATCHES.REGS[dr]);
+}
+
+/* And Immediate */
+void imm_and(short dr, short sr1, short off) {
+    signed short imm = sign(5, off);
+    NEXT_LATCHES.REGS[dr] = (short) (CURRENT_LATCHES.REGS[sr1] & imm);
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* And Register */
+void reg_and(short dr, short sr1, short sr2) {
+    NEXT_LATCHES.REGS[dr] = (short) (CURRENT_LATCHES.REGS[sr1] & CURRENT_LATCHES.REGS[sr2]);
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* Jump */
+void jmp(short base) { NEXT_LATCHES.PC = (short) (CURRENT_LATCHES.REGS[base]); }
+
+/* Jump to Subroutine with Offset */
+void jsr(short off) {
+    NEXT_LATCHES.REGS[7] = (short) NEXT_LATCHES.PC;
+    short imm = sign(11, off);
+    NEXT_LATCHES.PC = (short) (NEXT_LATCHES.PC + imm * 2);
+}
+
+/* Jump to Subroutine with Register */
+void jsrr(short base) {
+    NEXT_LATCHES.REGS[7] = (short) NEXT_LATCHES.PC;
+    NEXT_LATCHES.PC = (short) CURRENT_LATCHES.REGS[base];
+}
+
+/* Load Byte */
+void ldb(short dr, short base, short off) {
+    short imm = sign(6, off) / 2;
+    int p = sign(6, off) % 2;
+    short mem = CURRENT_LATCHES.REGS[base] / 2 + imm;
+    if(mem < 0){ return; }
+    NEXT_LATCHES.REGS[dr] = (short) MEMORY[mem][p];
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* Load Word */
+void ldw(short dr, short base, short off) {
+    short imm = sign(6, off);
+    short mem = CURRENT_LATCHES.REGS[base] + imm;
+    if(mem < 0){ return; }
+    NEXT_LATCHES.REGS[dr] = (short) (MEMORY[mem / 2][0] + MEMORY[mem / 2][1] * 256);
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* Load Effective Address */
+void lea(short dr, short off) {
+    short imm = sign(9, off);
+    NEXT_LATCHES.REGS[dr] = NEXT_LATCHES.PC + (imm * 2);
+}
+
+/* Left Shift */
+void lshf(short dr, short sr, short shift) {
+    NEXT_LATCHES.REGS[dr] = (short) (CURRENT_LATCHES.REGS[sr] << shift);
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* Right Shift Logical */
+void rshfl(short dr, short sr, short shift) {
+    NEXT_LATCHES.REGS[dr] = (short) (CURRENT_LATCHES.REGS[sr] >> shift);
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* Right Shift Arithmetic */
+void rshfa(short dr, short sr, short shift) {
+    if (CURRENT_LATCHES.REGS[sr] >= 0) {
+        rshfl(dr, sr, shift);
+        return;
+    }
+    else {
+        NEXT_LATCHES.REGS[dr] = CURRENT_LATCHES.REGS[sr];
+        for (; shift > 0; shift--) { NEXT_LATCHES.REGS[dr] = (short) ((NEXT_LATCHES.REGS[dr] >> 1) | 0x8000); }
+    }
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* Store Byte */
+void stb(short sr, short dr, short off) {
+    short imm = sign(6, off) / 2;
+    int p = sign(6, off) % 2;
+    short mem = CURRENT_LATCHES.REGS[dr] / 2 + imm;
+    if(mem < 0) { return; }
+    MEMORY[mem][p] = CURRENT_LATCHES.REGS[sr] & 0x00FF;
+}
+
+/* Store Word */
+void stw(short sr, short dr, short off) {
+    signed short imm = sign(6, off);
+    short mem = CURRENT_LATCHES.REGS[dr] + imm;
+    if(mem < 0) { return; }
+    MEMORY[mem/2][0] = CURRENT_LATCHES.REGS[sr] & 0x00FF;
+    MEMORY[mem/2][1] = (CURRENT_LATCHES.REGS[sr] & 0x0FF0) >> 8;
+}
+
+/* Trap */
+void trap(short tv) {
+    NEXT_LATCHES.REGS[7] = NEXT_LATCHES.PC;
+    short mem = tv & 0x00FF;
+    NEXT_LATCHES.PC = MEMORY[mem][0] + MEMORY[mem][1] * 256;
+}
+
+/* XOR with Immediate */
+void imm_xor(short dr, short sr, short off) {
+    short imm = sign(5, off);
+    NEXT_LATCHES.REGS[dr] = (short)(CURRENT_LATCHES.REGS[sr] ^ imm);
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* XOR with Register */
+void reg_xor(short dr, short sr1, short sr2) {
+    NEXT_LATCHES.REGS[dr] = (short) (CURRENT_LATCHES.REGS[sr1] ^ CURRENT_LATCHES.REGS[sr2]);
+    flags((short) NEXT_LATCHES.REGS[dr]);
+}
+
+/* Update NZP Flags */
+void flags(short dv){
+    if(dv < 0) {
+        NEXT_LATCHES.N = 1;
+        NEXT_LATCHES.Z = 0;
+        NEXT_LATCHES.P = 0;
+    }
+    else if(dv == 0) {
+        NEXT_LATCHES.N = 0;
+        NEXT_LATCHES.Z = 1;
+        NEXT_LATCHES.P = 0;
+    }
+    else {
+        NEXT_LATCHES.N = 0;
+        NEXT_LATCHES.Z = 0;
+        NEXT_LATCHES.P = 1;
+    }
+}
+
+/* Apply Masks */
+short sign(short mask, short data) {
+    switch (mask) {
+        case 5: {
+            if(data & 0x0010) { return -(((data & 0x001F) ^ 0x001F) + 1); }
+            else { return data & 0x001F; }
+        }
+        case 6: {
+            if(data & 0x0020) { return -(((data & 0x003F) ^ 0x003F) + 1); }
+            else { return data & 0x001F; }
+        }
+        case 9: {
+            if(data & 0x0100) { return -(((data & 0x01FF) ^ 0x01FF) + 1); }
+            else { return data & 0x001F; }
+        }
+        case 11: {
+            if(data & 0x0800) { return -(((data & 0x0FFF) ^ 0x0FFF) + 1); }
+            else { return data & 0x0FFF; }
+        }
+        default: { return data; }
+    }
+}
